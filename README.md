@@ -71,7 +71,8 @@ for week in range(10):
 ### Detailed Examples
 For more detailed examples, including setup of random events, thresholds, environmental factors, and inspecting simulation parameters, please see the `usage.py` file included in this repository.
 
-## Warhammer 2 Orc Poem
+## WAAAGH!
+```
 WAAAGH! by da green tide, we come to smash!
 Stompin' da stunties, hear da bones crash!
 Big 'uns and choppas, filled wif pure might,
@@ -80,7 +81,7 @@ Gork an' Mork watchin', grinnin' wif glee,
 Dis here's da best fight, for all Orcs, y'see!
 So grab yer best chopper, let out a great roar,
 Time for da WAAAGH!, and then WAAAGH! some more!
-
+```
 ## Contributing
 We welcome contributions to improve and expand this collection of math operators. If you have new functions or find improvements to existing ones, please follow these steps:
 
