@@ -1,15 +1,50 @@
 # Disclaimer : default values/events/factors are to be used for fun, this is strictly tuned for my needs in my project.
-
+"""
+Provides a population simulation engine including classes for managing
+population dynamics and random events.
+"""
 import random
 import math
 
 class RandomEventType:
+    """
+    Represents a type of random event that can affect population dynamics.
+
+    Attributes:
+        name (str): The name of the random event type.
+        occurrence_probability (float): The probability of this event occurring each week, if no other event is active.
+        min_duration_weeks (int): The minimum duration of the event in weeks.
+        max_duration_weeks (int): The maximum duration of the event in weeks.
+        birth_factor_impact (float): Multiplier for the birth rate during the event.
+        death_factor_impact (float): Multiplier for the death rate during the event.
+        k_factor_impact (float): Multiplier for the carrying capacity during the event.
+    """
     def __init__(self, name: str,
                  occurrence_probability: float,
                  min_duration_weeks: int, max_duration_weeks: int,
                  birth_factor_impact: float = 1.0,
                  death_factor_impact: float = 1.0,
                  k_factor_impact: float = 1.0):
+        """
+        Initializes a new RandomEventType.
+
+        Args:
+            name: The name of the event type.
+            occurrence_probability: The probability (0.0 to 1.0) of this event occurring in a given week
+                                      if no other event is active.
+            min_duration_weeks: The minimum possible duration of the event in weeks.
+            max_duration_weeks: The maximum possible duration of the event in weeks.
+            birth_factor_impact: A multiplier affecting the birth rate while the event is active.
+                                   Defaults to 1.0 (no impact).
+            death_factor_impact: A multiplier affecting the death rate while the event is active.
+                                   Defaults to 1.0 (no impact).
+            k_factor_impact: A multiplier affecting the carrying capacity (K) while the event is active.
+                               Defaults to 1.0 (no impact).
+
+        Raises:
+            ValueError: If occurrence_probability is not between 0.0 and 1.0, or if
+                        min_duration_weeks is not positive, or if max_duration_weeks is less than min_duration_weeks.
+        """
         if not (0.0 <= occurrence_probability <= 1.0):
             raise ValueError("Occurrence probability must be between 0.0 and 1.0.")
         if not (min_duration_weeks > 0 and max_duration_weeks >= min_duration_weeks):
@@ -30,6 +65,24 @@ class RandomEventType:
                 f"impacts(b:{self.birth_factor_impact}, d:{self.death_factor_impact}, k:{self.k_factor_impact}))")
 
 class PopulationSimulator:
+    """
+    Simulates population changes over time based on various factors and events.
+
+    This class models population dynamics using a logistic growth model modified
+    by density-dependent birth and death rates, stochasticity, environmental factors,
+    and random events.
+
+    Attributes:
+        P_current (float): The current population size.
+        base_K (float): The base carrying capacity of the environment.
+        b_base (float): The base per capita birth rate.
+        d_base (float): The base per capita death rate.
+        birth_density_exponent (float): Exponent controlling the density dependence of the birth rate.
+        death_density_exponent (float): Exponent controlling the density dependence of the death rate.
+        S_factor (float): Stochasticity factor, introducing random fluctuations.
+        week_count (int): The number of weeks elapsed in the simulation.
+        random_event_history (list): A log of random events that have occurred.
+    """
     def __init__(self,
                  initial_population: float,
                  base_carrying_capacity: float,
@@ -40,6 +93,34 @@ class PopulationSimulator:
                  stochasticity_factor: float = 0.0025,
                  possible_random_events: list[RandomEventType] = None,
                  thresholds: list[tuple[float, str, str]] = None):
+        """
+        Initializes the population simulator.
+
+        Args:
+            initial_population: The starting population size.
+            base_carrying_capacity: The baseline carrying capacity (K) of the environment.
+            base_birth_rate_per_capita: The per capita birth rate under ideal conditions (low density).
+                                         Defaults to 0.007.
+            base_death_rate_per_capita: The per capita death rate under ideal conditions (low density).
+                                         Defaults to 0.002.
+            birth_density_exponent: Exponent affecting how birth rate changes with density relative to K.
+                                     Higher values mean birth rate drops more sharply as population approaches K.
+                                     Defaults to 0.7.
+            death_density_exponent: Exponent affecting how death rate changes with density relative to K.
+                                     Higher values mean death rate climbs more sharply as population approaches/exceeds K.
+                                     Defaults to 3.0.
+            stochasticity_factor: A factor determining the magnitude of random Gaussian noise added to
+                                   population changes each week. Defaults to 0.0025.
+            possible_random_events: A list of `RandomEventType` objects that can occur during the simulation.
+                                      Defaults to None (no random events).
+            thresholds: A list of tuples, where each tuple defines a population threshold and associated
+                        event names for when the population crosses this threshold (rising or falling).
+                        Format: (population_value, "event_name_on_rise", "event_name_on_fall").
+                        Defaults to None.
+
+        Raises:
+            ValueError: If base_carrying_capacity is not positive.
+        """
         self.P_current = float(max(0.0, initial_population))
         if not base_carrying_capacity > 0:
             raise ValueError("Base Carrying Capacity (base_carrying_capacity) must be positive.")
@@ -100,6 +181,18 @@ class PopulationSimulator:
         return delta_P_det + delta_P_stoch
 
     def set_thresholds(self, thresholds_list: list[tuple[float, str, str]]):
+        """
+        Sets or updates population thresholds that trigger named events.
+
+        Each threshold is defined by a population value and two event names: one for when
+        the population rises past the threshold, and one for when it falls below it.
+        Thresholds are sorted by population value.
+
+        Args:
+            thresholds_list: A list of tuples. Each tuple should be in the format
+                             (population_value: float, event_name_on_rise: str, event_name_on_fall: str).
+                             Invalid entries will be skipped with a warning.
+        """
         self._thresholds = []
         for t_val, t_name_rise, t_name_fall in thresholds_list:
             if not (isinstance(t_val, (int, float)) and isinstance(t_name_rise, str) and isinstance(t_name_fall, str)):
@@ -109,6 +202,17 @@ class PopulationSimulator:
         self._thresholds.sort(key=lambda x: x[0])
 
     def set_environmental_factors(self, birth_factor: float = None, death_factor: float = None, k_factor: float = None):
+        """
+        Sets manual environmental multipliers for birth rate, death rate, and carrying capacity.
+
+        These factors are applied on top of any active random event impacts.
+        If a factor is not provided (None), its current value remains unchanged.
+
+        Args:
+            birth_factor: Multiplier for the birth rate. E.g., 1.1 for a 10% increase.
+            death_factor: Multiplier for the death rate. E.g., 0.9 for a 10% decrease.
+            k_factor: Multiplier for the carrying capacity. E.g., 1.2 for a 20% increase.
+        """
         if birth_factor is not None: self._E_birth_factor = float(birth_factor)
         if death_factor is not None: self._E_death_factor = float(death_factor)
         if k_factor is not None: self._E_k_factor = float(k_factor)
@@ -152,6 +256,19 @@ class PopulationSimulator:
         return birth_factor, death_factor, k_factor
 
     def advance_one_week(self) -> tuple[float, list[str]]:
+        """
+        Advances the simulation by one week.
+
+        This method calculates the population change based on current conditions,
+        updates the population, checks for random events, and identifies any
+        triggered threshold events.
+
+        Returns:
+            A tuple containing:
+                - P_current (float): The new population after the week's changes.
+                - triggered_events (list[str]): A list of names of any threshold events
+                                                triggered during this week.
+        """
         self.week_count += 1
         P_previous = self.P_current
         self._check_for_random_event()
@@ -171,22 +288,50 @@ class PopulationSimulator:
         return self.P_current, triggered_events
 
     def get_population(self) -> float:
+        """Returns the current population size."""
         return self.P_current
 
     def get_week_count(self) -> int:
+        """Returns the number of weeks elapsed in the simulation."""
         return self.week_count
 
     def get_current_carrying_capacity(self) -> float:
+        """
+        Calculates and returns the current effective carrying capacity.
+
+        This considers the base carrying capacity and any active environmental
+        or random event multipliers for K.
+
+        Returns:
+            The current effective carrying capacity.
+        """
         _, _, combined_k_factor = self._get_combined_factors()
         return self.base_K * combined_k_factor
 
     def get_active_random_event(self) -> tuple[str, int] | None:
+        """
+        Gets details of the currently active random event, if any.
+
+        Returns:
+            A tuple (event_name: str, weeks_left: int) if an event is active.
+            None otherwise.
+        """
         if self._active_random_event_details:
             event_obj, weeks_left = self._active_random_event_details
             return event_obj.name, weeks_left
         return None
 
     def get_simulation_parameters(self) -> dict:
+        """
+        Retrieves a dictionary of the current simulation state and parameters.
+
+        This is useful for logging, debugging, or displaying the simulation status.
+
+        Returns:
+            A dictionary containing key simulation parameters, including current population,
+            carrying capacities (base and effective), birth/death rates, factor impacts,
+            active random event details, and week count.
+        """
         eff_birth, eff_death, eff_k = self._get_combined_factors()
         active_event_name, active_event_weeks = self.get_active_random_event() or (None, 0)
         return {
